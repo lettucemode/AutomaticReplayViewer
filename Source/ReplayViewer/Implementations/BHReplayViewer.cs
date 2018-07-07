@@ -1,4 +1,6 @@
-﻿using AForge.Imaging.Filters;
+﻿using AForge;
+using AForge.Imaging;
+using AForge.Imaging.Filters;
 using InputManager;
 using System;
 using System.Drawing;
@@ -9,7 +11,7 @@ class BHReplayViewer : ReplayViewer
 {
     public BHReplayViewer() : base("Brawlhalla", "Brawlhalla", false)
     {
-        Title = (Bitmap) Image.FromFile("Images/Title.png");
+        Title = (Bitmap)System.Drawing.Image.FromFile("Images/Title.png");
     }
 
     public void StartLoop(int ReplaysToPlay, Keys RecordStart, Keys RecordStop)
@@ -37,6 +39,8 @@ class BHReplayViewer : ReplayViewer
             ResizeBilinear Resize = new ResizeBilinear( Convert.ToInt32(220 *ScalingFactor) , Convert.ToInt32(146 *ScalingFactor) );
             Title = Resize.Apply(Title);
 
+            CurrentReplayLocation = FindCurrentLocation(previousscreen);
+
             LoopThread = new Thread(() => PlaybackLoop(ReplaysToPlay, RecordStart, RecordStop));
             LoopThread.Start();
         }
@@ -50,6 +54,8 @@ class BHReplayViewer : ReplayViewer
     {
         screen = ScreenGrabber.PrintWindow(hWnd);
 
+        // Need different method to find out if were at the main menu
+        // The logo is not a constant across patches
         menu = ScreenGrabber.Contains(screen, Title);
 
         if (menu)
@@ -93,6 +99,13 @@ class BHReplayViewer : ReplayViewer
         Thread.Sleep(100);
 
         // TODO - navigate to appropriate replay
+        for (int i = 0; i < CurrentReplayLocation; i++)
+        {
+            Keyboard.KeyDown(Keys.Down);
+            Thread.Sleep(50);
+            Keyboard.KeyUp(Keys.Down);
+            Thread.Sleep(50);
+        }
 
         Keyboard.KeyDown(Keys.Enter);
         Thread.Sleep(50);
@@ -110,11 +123,54 @@ class BHReplayViewer : ReplayViewer
     protected override void InMatchInputs()
     {
 
+    } 
+
+    protected int FindCurrentLocation(Bitmap bmp)
+    {
+        HSLFiltering filter = new HSLFiltering
+        {
+            Saturation = new Range(0.99f, 1f),
+            Luminance = new Range(0.09f, 0.11f),
+            Hue = new IntRange(239, 241)
+        };
+
+        bmp = filter.Apply(bmp);
+
+        for (int i = 0; i < 17; i++)
+        {
+            Crop crop = new Crop(new Rectangle(ReplayBoundsX[0], ReplayBoundsY[i, 0], ReplayBoundsX[1] - ReplayBoundsX[0], ReplayBoundsY[i, 1] - ReplayBoundsY[i, 0]));
+            ImageStatisticsHSL stat = new ImageStatisticsHSL(crop.Apply(bmp));
+            if (stat.Luminance.Mean < 0.001)
+                return i;
+        }
+        return -1;
     }
 
     private double ScalingFactor;
     private int ResX;
     private int ResY;
+    private int CurrentReplayLocation;
+    private int[] ReplayBoundsX = new int[2] { 989, 1527 };
+    private int[,] ReplayBoundsY = 
+    {
+        { 144, 176 },
+        { 186, 218 },
+        { 228, 260 },
+        { 270, 302 },
+        { 312, 344 },
+        { 354, 386 },
+        { 397, 429 },
+        { 439, 471 },
+        { 481, 513 },
+        { 523, 555 },
+        { 565, 597 },
+        { 608, 640 },
+        { 650, 682 },
+        { 692, 724 },
+        { 734, 766 },
+        { 776, 808 },
+        { 819, 851 }
+    };
     private bool Res4by3;
     private bool NoErrors;
     private Bitmap screen;
